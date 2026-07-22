@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web socket</title>
+</head>
+<body>
+    <h1>Chit Chat</h1>
+    <button onclick="call()">Call</button>
+
+    <div style="display:flex; gap:10px; margin:10px 0;">
+  <div>
+    <p>Local (you)</p>
+    <video id="localVideo" autoplay playsinline muted width="300"></video>
+  </div>
+  <div>
+    <p>Remote (them)</p>
+    <video id="remoteVideo" autoplay playsinline width="300"></video>
+  </div>
+</div>
+
+    <div id="body">
+
+    </div>
+    <textarea  id="msg"></textarea>
+    <button  id="send">Send</button>
+    <script>
+        const socket = new WebSocket("ws://localhost:8080/ws",)
+        socket.onopen = ()=>console.log("connected");
+        socket.onclose = ()=>console.log("disconnected");
+
+        const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const pc = new RTCPeerConnection(config)
+        let channel;
+
+        
+        
+        socket.onmessage = async (event)=>{
+            const body = document.getElementById("body")
+            
+            const data = JSON.parse(event.data)
+            switch (data.type) {
+                case "offer":
+
+                    const button = document.createElement("button")
+                    button.textContent = "Answer call"
+                    button.addEventListener("click",async()=>{
+                        console.log("answering");
+                        
+                        await pc.setRemoteDescription(data)
+                        const answer = await pc.createAnswer()
+                        await pc.setLocalDescription(answer)
+                        socket.send(JSON.stringify(answer))
+                        await startCall()
+                        body.removeChild(button)
+                    })
+                    // p.textContent = `User: ${event.data}`
+                    body.appendChild(button)
+                    break;
+                case "answer":
+                    await pc.setRemoteDescription(data)
+                    const p = document.createElement("p")
+                    p.textContent = "Call Received"
+                    body.appendChild(p)
+                    break;
+                default:
+                    break;
+                
+            }
+            console.log(data.candidate);
+            console.log(data.type);
+            
+
+            if (data.candidate) {
+                await pc.addIceCandidate(data)
+            }
+
+        }
+
+        pc.onicecandidate = (e)=>{
+            if (e.candidate) {
+                console.log("Adding candidate");
+                socket.send(JSON.stringify(e.candidate))
+            }
+        }
+        pc.onconnectionstatechange = ()=>console.log("State changed: ",pc.connectionState)
+
+        pc.ondatachannel  = (e)=>{
+            channel = e.channel
+            console.log("channel: ",channel);
+            
+            channel.onopen = ()=>console.log("Opened");
+            channel.onmessage = (msg)=>console.log(msg.data)
+        }
+        pc.ontrack = (e)=>{
+            const remote = document.getElementById("remoteVideo")
+            if (remote.srcObject !== e.streams[0]) {
+                remote.srcObject = e.streams[0]
+            }
+        }
+
+        async function startCall() {
+            const localStream = await navigator.mediaDevices.getUserMedia({audio:true,video:true})
+            document.getElementById("localVideo").srcObject = localStream
+
+            localStream.getTracks().forEach(track=>{
+                pc.addTrack(track,localStream)
+            })
+        }
+
+        async function call() {
+            console.log("calling");
+            await startCall()
+            
+            channel = pc.createDataChannel("chat")
+             channel.onopen = ()=>console.log("Opened");
+            channel.onmessage = (msg)=>console.log(msg.data)
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            console.log("calling");
+            
+            socket.send(JSON.stringify(offer))
+        }
+
+        
+
+        document.getElementById("send").addEventListener("click",()=>{
+            const content = document.getElementById("msg").value
+            console.log(channel.readyState);
+            
+            
+            if (content && channel && channel.readyState === "open") {
+                
+                
+                 const p = document.createElement("p")
+            p.textContent = `Me: ${content}`
+            document.getElementById("body").appendChild(p)
+            channel.send(content)
+
+
+
+            }
+        })
+
+    </script>
+</body>
+</html>

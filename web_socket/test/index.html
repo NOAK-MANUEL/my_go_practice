@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head><title>WebRTC Video Call via Go Signaling</title></head>
+<body style="font-family: monospace; background:#111; color:#eee;">
+<h2>WebRTC Video Call</h2>
+
+<button onclick="startMedia()">1. Start camera/mic</button>
+<button onclick="call()">2. Call (create offer)</button>
+
+<div style="display:flex; gap:10px; margin:10px 0;">
+  <div>
+    <p>Local (you)</p>
+    <video id="localVideo" autoplay playsinline muted width="300"></video>
+  </div>
+  <div>
+    <p>Remote (them)</p>
+    <video id="remoteVideo" autoplay playsinline width="300"></video>
+  </div>
+</div>
+
+<div id="log" style="background:#000; color:#0f0; height:200px; overflow-y:scroll; padding:10px; white-space:pre-wrap;"></div>
+
+<script>
+function log(msg) {
+  document.getElementById('log').textContent += msg + '\n';
+}
+
+const ws = new WebSocket('ws://localhost:8080/ws');
+const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const pc = new RTCPeerConnection(config);
+let localStream;
+
+ws.onopen = () => log('[ws] connected');
+ws.onclose = () => log('[ws] disconnected');
+
+ws.onmessage = async (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'offer') {
+    log('[recv] offer');
+    await pc.setRemoteDescription(data);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    ws.send(JSON.stringify(answer));
+    log('[sent] answer');
+  } else if (data.type === 'answer') {
+    log('[recv] answer');
+    await pc.setRemoteDescription(data);
+  } else if (data.candidate) {
+    await pc.addIceCandidate(data);
+  }
+};
+
+pc.onicecandidate = (e) => {
+  if (e.candidate) ws.send(JSON.stringify(e.candidate));
+};
+
+pc.onconnectionstatechange = () => log('[pc] state: ' + pc.connectionState);
+
+// Fires once per incoming track (so typically twice: once for audio, once for video)
+pc.ontrack = (e) => {
+  log('[pc] received remote track: ' + e.track.kind);
+  const remoteVideo = document.getElementById('remoteVideo');
+  if (remoteVideo.srcObject !== e.streams[0]) {
+    remoteVideo.srcObject = e.streams[0];
+  }
+};
+
+async function startMedia() {
+  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  document.getElementById('localVideo').srcObject = localStream;
+  log('[media] camera/mic started, tracks: ' + localStream.getTracks().map(t => t.kind).join(', '));
+
+  // Attach each local track to the peer connection so it gets included in the offer/answer.
+  localStream.getTracks().forEach(track => {
+    pc.addTrack(track, localStream);
+  });
+}
+
+async function call() {
+  if (!localStream) {
+    log('[error] click "Start camera/mic" first');
+    return;
+  }
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify(offer));
+  log('[sent] offer');
+}
+</script>
+</body>
+</html>

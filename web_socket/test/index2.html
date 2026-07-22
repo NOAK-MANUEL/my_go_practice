@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head><title>WebRTC via Go Signaling</title></head>
+<body style="font-family: monospace; background:#111; color:#eee;">
+<h2>WebRTC Client</h2>
+<button onclick="call()">Call (create offer)</button>
+<button onclick="sendMsg()">Send data channel message</button>
+<div id="log" style="background:#000; color:#0f0; height:300px; overflow-y:scroll; padding:10px; white-space:pre-wrap;"></div>
+
+<script>
+function log(msg) {
+  document.getElementById('log').textContent += msg + '\n';
+}
+
+const ws = new WebSocket('ws://localhost:8080/ws');
+const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const pc = new RTCPeerConnection(config);
+let dataChannel;
+
+ws.onopen = () => log('[ws] connected to signaling server');
+ws.onclose = () => log('[ws] disconnected');
+
+// Any message from the signaling server is either an offer, answer, or ICE candidate.
+// We inspect its shape to decide what to do with it.
+ws.onmessage = async (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === 'offer') {
+    log('[recv] offer');
+    await pc.setRemoteDescription(data);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    ws.send(JSON.stringify(answer));
+    log('[sent] answer');
+  } else if (data.type === 'answer') {
+    log('[recv] answer');
+    await pc.setRemoteDescription(data);
+  } else if (data.candidate) {
+    log('[recv] ICE candidate');
+    await pc.addIceCandidate(data);
+  }
+};
+
+pc.onicecandidate = (e) => {
+  if (e.candidate) {
+    ws.send(JSON.stringify(e.candidate));
+    log('[sent] ICE candidate');
+  }
+};
+
+pc.onconnectionstatechange = () => log('[pc] state: ' + pc.connectionState);
+
+pc.ondatachannel = (e) => {
+  dataChannel = e.channel;
+  dataChannel.onopen = () => log('[dc] open (as receiver)');
+  dataChannel.onmessage = (m) => log('[dc] received: ' + m.data);
+};
+
+async function call() {
+  dataChannel = pc.createDataChannel('chat');
+  dataChannel.onopen = () => log('[dc] open (as caller)');
+  dataChannel.onmessage = (m) => log('[dc] received: ' + m.data);
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify(offer));
+  log('[sent] offer');
+}
+
+function sendMsg() {
+  if (dataChannel && dataChannel.readyState === 'open') {
+    const msg = 'hello, ' + new Date().toLocaleTimeString();
+    dataChannel.send(msg);
+    log('[dc] sent: ' + msg);
+  } else {
+    log('[dc] not open yet');
+  }
+}
+</script>
+</body>
+</html>

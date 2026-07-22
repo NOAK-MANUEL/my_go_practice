@@ -14,6 +14,7 @@ func readFile(path string) ([][]string, error) {
 		return nil, err
 	}
 
+	defer file.Close()
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	return records, err
