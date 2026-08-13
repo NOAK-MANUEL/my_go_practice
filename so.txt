@@ -1,0 +1,2 @@
+public=test_pk_kitsfk8f4sy4648iui9y
+secret=test_sk_jh9brkpuvjvxqbf0g38q

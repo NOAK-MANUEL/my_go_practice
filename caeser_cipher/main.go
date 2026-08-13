@@ -1,7 +1,12 @@
 package main
 
-func main() {
+import "strings"
 
+func main() {
+	text := Caeser_Encrypt("Hello how u, what's popping", 3)
+	println(text)
+	text = Caeser_Decrypt(text, 3)
+	println(text)
 }
 
 func ShiftChar(ch byte, shift int) byte {
@@ -10,20 +15,19 @@ func ShiftChar(ch byte, shift int) byte {
 	}
 	if ch >= 'A' && ch <= 'Z' {
 		return byte((int(ch-'A')+shift+26)%26) + 'A'
-
 	}
 	return ch
 }
 
-func CaeserEncrypt(text string, shift int) []byte {
-	values := make([]byte, len(text))
+func Caeser_Encrypt(text string, shift int) string {
+	var result strings.Builder
 
 	for i := 0; i < len(text); i++ {
-		values = append(values, ShiftChar(text[i], shift))
+		result.WriteByte(ShiftChar(text[i], shift))
 	}
-	return values
+	return result.String()
 }
 
-func CaeserDecrypt(text string, shift int) []byte {
-	return CaeserEncrypt(text, -shift)
+func Caeser_Decrypt(text string, shift int) string {
+	return Caeser_Encrypt(text, -shift)
 }
