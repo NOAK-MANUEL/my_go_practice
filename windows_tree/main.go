@@ -3,10 +3,59 @@ package main
 import (
 	"os"
 	"path/filepath"
+
+	// "strconv"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
+type model struct {
+	items    []string
+	selected int
+}
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+func (m model) View() string {
+	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	var output string = ""
+	for index, item := range m.items {
+		if index == m.selected {
+
+			output += selectedStyle.Render(">"+item) + "\n"
+		} else {
+			output += item + "\n"
+
+		}
+	}
+	return output
+}
+func (m model) Update(msgType tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msgType.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up":
+			if m.selected > 0 {
+				m.selected--
+			}
+
+		case "down":
+			if m.selected < len(m.items)-1 {
+				m.selected++
+			}
+
+		case "q":
+			return m, tea.Quit
+		}
+
+	}
+	return m, nil
+}
 func isParent(index, length int) string {
+
 	if index == length {
 		return "└──"
 	} else {
@@ -34,7 +83,9 @@ func parseTree(path string, depth int) {
 	}
 }
 func main() {
-	path := os.Args[1]
+	// path := os.Args[1]
 
-	parseTree(path, 0)
+	// parseTree(path, 0)
+	p := tea.NewProgram(model{items: []string{"src", "bb", "app", "go.sum"}, selected: 0})
+	p.Run()
 }
